@@ -1,0 +1,626 @@
+// ==UserScript==
+// @name         하드웨어 가속 토글
+// @namespace    http://tampermonkey.net/
+// @version      0.4
+// @description  크롬 하드웨어 가속 설정을 쉽게 토글할 수 있는 스위치 (네이버에서만 표시)
+// @author       You
+// @match        *://www.naver.com/*
+// @match        *://naver.com/*
+// @match        chrome://settings/system*
+// @match        chrome://flags/*
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_addStyle
+// @run-at       document-start
+// @monitorcapture
+// ==/UserScript==
+
+(function() {
+    'use strict';
+    
+    // 현재 하드웨어 가속 상태 (기본값: 활성화)
+    let isAccelerationEnabled = GM_getValue('hwAcceleration', true);
+    
+    // 콘솔에 로그 출력
+    console.log('하드웨어 가속 토글 스크립트가 로드되었습니다. 현재 상태:', isAccelerationEnabled ? '활성화' : '비활성화');
+    
+    // 최근 설정 변경 시간
+    const lastSettingChangeTime = GM_getValue('lastSettingChangeTime', 0);
+    const currentTime = Date.now();
+    
+    // 설정 변경 이후 지난 시간 (밀리초)
+    const timeSinceLastChange = currentTime - lastSettingChangeTime;
+    
+    // 마지막 변경 후 1분 이상 지났는지 확인 (자동 상태 초기화용)
+    if (timeSinceLastChange > 60000 && lastSettingChangeTime !== 0) {
+        console.log('변경 후 1분 이상 지남, 페이지 리디렉션 중지');
+        GM_setValue('redirecting', false);
+    }
+    
+    // CSS 스타일 추가
+    const styles = `
+        #hw-accel-toggle-container {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background-color: #ffffff;
+            border: 1px solid #cccccc;
+            border-radius: 4px;
+            padding: 8px 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 9999;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            user-select: none;
+        }
+        
+        #hw-accel-toggle-container.active {
+            background-color: #e6f7ff;
+            border-color: #1890ff;
+        }
+        
+        #hw-accel-toggle-container.inactive {
+            background-color: #fff1f0;
+            border-color: #ff4d4f;
+        }
+        
+        #hw-accel-toggle-label {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        
+        #hw-accel-status {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: #1890ff;
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+        
+        #hw-accel-notification {
+            position: fixed;
+            top: 60px;
+            right: 10px;
+            z-index: 10000;
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 4px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            font-family: Arial, sans-serif;
+            max-width: 300px;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        
+        #hw-accel-notification.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        #hw-accel-notification-title {
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        /* 재시작 대화상자 스타일 */
+        #hw-accel-restart-dialog {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10001;
+        }
+        
+        #hw-accel-restart-dialog-content {
+            background-color: white;
+            padding: 24px;
+            border-radius: 8px;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        #hw-accel-restart-dialog h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        #hw-accel-restart-dialog p {
+            margin: 16px 0;
+            line-height: 1.5;
+            color: #666;
+        }
+        
+        #hw-accel-restart-dialog-buttons {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        #hw-accel-restart-dialog button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        #hw-accel-restart-button {
+            background-color: #1890ff;
+            color: white;
+        }
+        
+        #hw-accel-restart-button:hover {
+            background-color: #40a9ff;
+        }
+        
+        #hw-accel-restart-later-button {
+            background-color: #f0f0f0;
+            color: #666;
+        }
+        
+        #hw-accel-restart-later-button:hover {
+            background-color: #e0e0e0;
+        }
+        
+        /* 직접 설정 도움 버튼 */
+        #hw-accel-manual-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #ff6b6b;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 9999;
+        }
+        
+        #hw-accel-manual-button:hover {
+            background-color: #ff8787;
+        }
+        
+        /* 오버레이 스타일 추가 */
+        #hw-accel-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #hw-accel-overlay-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            max-width: 400px;
+        }
+        #hw-accel-overlay-content p {
+            margin: 0 0 10px;
+        }
+        #hw-accel-overlay-content button {
+            margin: 0 5px;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    `;
+    
+    try {
+        GM_addStyle(styles);
+    } catch (e) {
+        // GM_addStyle를 사용할 수 없는 경우 대체 방법
+        const styleElement = document.createElement('style');
+        styleElement.textContent = styles;
+        document.head.appendChild(styleElement);
+    }
+    
+    // 현재 URL이 네이버인지 확인
+    function isNaverDomain() {
+        return window.location.hostname.includes('naver.com');
+    }
+    
+    // 현재 URL이 크롬 설정 페이지인지 확인
+    function isChromeSettingsPage() {
+        return window.location.href.includes('chrome://settings/system');
+    }
+    
+    // 현재 URL이 크롬 플래그 페이지인지 확인
+    function isChromeFlags() {
+        return window.location.href.includes('chrome://flags');
+    }
+    
+    // 화면에 알림 표시 함수
+    function showNotification(title, message, duration) {
+        // 기존 알림 요소 찾기 또는 생성
+        let notification = document.getElementById('hw-accel-notification');
+        
+        if (!notification) {
+            notification = document.createElement('div');
+            notification.id = 'hw-accel-notification';
+            
+            const titleElement = document.createElement('div');
+            titleElement.id = 'hw-accel-notification-title';
+            
+            const messageElement = document.createElement('div');
+            messageElement.id = 'hw-accel-notification-message';
+            
+            notification.appendChild(titleElement);
+            notification.appendChild(messageElement);
+            
+            document.body.appendChild(notification);
+        }
+        
+        // 알림 내용 설정
+        document.getElementById('hw-accel-notification-title').textContent = title;
+        document.getElementById('hw-accel-notification-message').textContent = message;
+        
+        // 알림 표시
+        notification.classList.add('show');
+        
+        // 지정된 시간 후 알림 숨기기
+        setTimeout(() => {
+            notification.classList.remove('show');
+        }, duration || 3000);
+        
+        // 콘솔에도 로그 출력
+        console.log(`${title}: ${message}`);
+    }
+    
+    // 재시작 대화상자 표시
+    function showRestartDialog() {
+        // 이미 존재하는 대화상자 제거
+        const existingDialog = document.getElementById('hw-accel-restart-dialog');
+        if (existingDialog) {
+            document.body.removeChild(existingDialog);
+        }
+        
+        // 새 대화상자 생성
+        const dialog = document.createElement('div');
+        dialog.id = 'hw-accel-restart-dialog';
+        
+        const content = document.createElement('div');
+        content.id = 'hw-accel-restart-dialog-content';
+        
+        const title = document.createElement('h2');
+        title.textContent = '브라우저 재시작 필요';
+        
+        const message = document.createElement('p');
+        message.textContent = '하드웨어 가속 설정이 변경되었습니다. 변경사항을 적용하려면 브라우저를 재시작해야 합니다.';
+        
+        const buttons = document.createElement('div');
+        buttons.id = 'hw-accel-restart-dialog-buttons';
+        
+        const restartButton = document.createElement('button');
+        restartButton.id = 'hw-accel-restart-button';
+        restartButton.textContent = '지금 재시작';
+        restartButton.addEventListener('click', function() {
+            // 사용자에게 브라우저를 재시작하도록 안내
+            GM_setValue('redirecting', false); // 리디렉션 상태 초기화
+            window.location.href = 'chrome://restart';
+        });
+        
+        const laterButton = document.createElement('button');
+        laterButton.id = 'hw-accel-restart-later-button';
+        laterButton.textContent = '나중에';
+        laterButton.addEventListener('click', function() {
+            dialog.remove();
+            GM_setValue('redirecting', false); // 리디렉션 상태 초기화
+            
+            // 네이버로 돌아가기
+            setTimeout(() => {
+                window.location.href = 'https://www.naver.com';
+            }, 1000);
+        });
+        
+        buttons.appendChild(restartButton);
+        buttons.appendChild(laterButton);
+        
+        content.appendChild(title);
+        content.appendChild(message);
+        content.appendChild(buttons);
+        dialog.appendChild(content);
+        
+        document.body.appendChild(dialog);
+    }
+    
+    // 수동 설정 도움 버튼 추가
+    function addManualSettingButton() {
+        const button = document.createElement('div');
+        button.id = 'hw-accel-manual-button';
+        button.textContent = '자동 설정이 작동하지 않나요? 여기를 클릭하세요';
+        
+        button.addEventListener('click', function() {
+            const currentUrl = window.location.href;
+            
+            if (isChromeSettingsPage()) {
+                showNotification('수동 설정 안내', 
+                    '"가능한 경우 하드웨어 가속 사용" 토글 버튼을 ' + 
+                    (isAccelerationEnabled ? 'ON' : 'OFF') + '으로 수동 변경 후 재시작해주세요.', 
+                    10000);
+            } else if (isChromeFlags()) {
+                showNotification('수동 설정 안내', 
+                    '검색창에 "Hardware-accelerated video decode"를 입력하고 ' + 
+                    (isAccelerationEnabled ? '활성화' : '비활성화') + '로 설정 후 재시작해주세요.', 
+                    10000);
+            }
+            
+            // 리디렉션 상태 초기화
+            GM_setValue('redirecting', false);
+        });
+        
+        document.body.appendChild(button);
+    }
+    
+    // 토글 스위치 UI 생성
+    function createToggleUI() {
+        const container = document.createElement('div');
+        container.id = 'hw-accel-toggle-container';
+        container.className = isAccelerationEnabled ? 'active' : 'inactive';
+        
+        const label = document.createElement('span');
+        label.id = 'hw-accel-toggle-label';
+        label.textContent = '하드웨어 가속:';
+        
+        const status = document.createElement('span');
+        status.id = 'hw-accel-status';
+        status.textContent = isAccelerationEnabled ? '활성화' : '비활성화';
+        status.style.color = isAccelerationEnabled ? '#1890ff' : '#ff4d4f';
+        
+        const toggleSwitch = document.createElement('label');
+        toggleSwitch.className = 'toggle-switch';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = isAccelerationEnabled;
+        checkbox.id = 'hw-accel-toggle-checkbox';
+        
+        const slider = document.createElement('span');
+        slider.className = 'toggle-slider';
+        
+        toggleSwitch.appendChild(checkbox);
+        toggleSwitch.appendChild(slider);
+        
+        container.appendChild(label);
+        container.appendChild(status);
+        container.appendChild(toggleSwitch);
+        
+        // 토글 이벤트 리스너
+        checkbox.addEventListener('change', function() {
+            setAccelerationState(this.checked);
+        });
+        
+        return container;
+    }
+    
+    // 오버레이 안내 함수
+    function showOverlay(message) {
+        let overlay = document.getElementById('hw-accel-overlay');
+        if (overlay) overlay.remove();
+        overlay = document.createElement('div');
+        overlay.id = 'hw-accel-overlay';
+        const content = document.createElement('div');
+        content.id = 'hw-accel-overlay-content';
+        const msg = document.createElement('p');
+        msg.textContent = message;
+        content.appendChild(msg);
+        const okBtn = document.createElement('button');
+        okBtn.textContent = '확인';
+        okBtn.addEventListener('click', () => overlay.remove());
+        content.appendChild(okBtn);
+        overlay.appendChild(content);
+        document.body.appendChild(overlay);
+    }
+    
+    // 상태 설정 함수
+    function setAccelerationState(enabled) {
+        // 상태가 변경된 경우에만 처리
+        if (isAccelerationEnabled !== enabled) {
+            isAccelerationEnabled = enabled;
+            GM_setValue('hwAcceleration', enabled);
+            GM_setValue('lastSettingChangeTime', Date.now());
+            GM_setValue('redirecting', true); // 리디렉션 상태 설정
+            
+            // UI 업데이트
+            updateToggleUI();
+            
+            // 콘솔에 로그 출력
+            console.log('하드웨어 가속 상태 변경:', enabled ? '활성화' : '비활성화');
+            
+            // 알림 표시
+            showNotification('하드웨어 가속 설정', 
+                `하드웨어 가속을 ${enabled ? '활성화' : '비활성화'}로 설정합니다. 페이지 이동 중...`, 
+                3000);
+            
+            // 어떤 페이지로 이동할지 결정
+            let targetUrl;
+            if (enabled) {
+                // 하드웨어 가속 활성화 페이지
+                targetUrl = 'chrome://settings/system';
+            } else {
+                // 하드웨어 가속 비활성화 페이지
+                targetUrl = 'chrome://flags/#disable-accelerated-video-decode';
+            }
+            
+            // 약간의 지연 후 새 탭으로 설정 페이지 열고 오버레이 안내
+            setTimeout(() => {
+                window.open(targetUrl, '_blank');
+                const overlayMsg = enabled
+                    ? '"가능한 경우 하드웨어 가속 사용" 옵션을 ON으로 설정해주세요.'
+                    : '"Hardware-accelerated video decode" 옵션을 Disabled로 변경해주세요.';
+                showOverlay(overlayMsg);
+            }, 1500);
+        }
+    }
+    
+    // UI 업데이트 함수
+    function updateToggleUI() {
+        const container = document.getElementById('hw-accel-toggle-container');
+        const status = document.getElementById('hw-accel-status');
+        const checkbox = document.getElementById('hw-accel-toggle-checkbox');
+        
+        if (container && status && checkbox) {
+            container.className = isAccelerationEnabled ? 'active' : 'inactive';
+            status.textContent = isAccelerationEnabled ? '활성화' : '비활성화';
+            status.style.color = isAccelerationEnabled ? '#1890ff' : '#ff4d4f';
+            checkbox.checked = isAccelerationEnabled;
+        }
+    }
+    
+    // DOM이 로드된 후 UI 추가
+    function initUI() {
+        if (document.body) {
+            // 네이버 도메인에서만 토글 스위치 표시
+            if (isNaverDomain() && !document.getElementById('hw-accel-toggle-container')) {
+                const toggleUI = createToggleUI();
+                document.body.appendChild(toggleUI);
+                console.log('하드웨어 가속 토글 UI가 추가되었습니다.');
+            }
+            
+            // 크롬 설정 페이지에서 수동 설정 도움 버튼 추가
+            if ((isChromeSettingsPage() || isChromeFlags()) && !document.getElementById('hw-accel-manual-button')) {
+                addManualSettingButton();
+            }
+        } else {
+            // body가 아직 로드되지 않은 경우 다시 시도
+            setTimeout(initUI, 100);
+        }
+    }
+    
+    // 페이지 로드 이벤트
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        initUI();
+    } else {
+        document.addEventListener('DOMContentLoaded', initUI);
+    }
+    
+    // 페이지 로드 완료 시 실행
+    window.addEventListener('load', function() {
+        // 현재 페이지 확인
+        const currentUrl = window.location.href;
+        console.log('페이지 로드됨:', currentUrl);
+        
+        // 리디렉션 상태 확인
+        const isRedirecting = GM_getValue('redirecting', false);
+        
+        // 현재 페이지가 chrome://settings/system인 경우
+        if (currentUrl.includes('chrome://settings/system')) {
+            console.log('설정 페이지 감지됨');
+            
+            // 페이지 로드 후 약간의 지연을 줌
+            setTimeout(() => {
+                // 직접 설정 버튼이 없으면 추가
+                if (!document.getElementById('hw-accel-manual-button')) {
+                    addManualSettingButton();
+                }
+                
+                // 사용자에게 설정 변경 안내
+                showNotification('하드웨어 가속 설정', 
+                    `"가능한 경우 하드웨어 가속 사용" 옵션을 ${isAccelerationEnabled ? 'ON' : 'OFF'}로 설정해주세요.`, 
+                    8000);
+                
+                // 만약 리디렉션 중이라면 재시작 대화상자 표시
+                if (isRedirecting) {
+                    setTimeout(() => {
+                        showRestartDialog();
+                    }, 2000);
+                }
+            }, 1000);
+        }
+        
+        // 현재 페이지가 chrome://flags인 경우
+        if (currentUrl.includes('chrome://flags')) {
+            console.log('플래그 페이지 감지됨');
+            
+            // 페이지 로드 후 약간의 지연을 줌
+            setTimeout(() => {
+                // 직접 설정 버튼이 없으면 추가
+                if (!document.getElementById('hw-accel-manual-button')) {
+                    addManualSettingButton();
+                }
+                
+                // 하드웨어 가속 관련 플래그 찾기
+                const searchInput = document.querySelector('#search');
+                if (searchInput) {
+                    searchInput.value = 'Hardware-accelerated video decode';
+                    searchInput.dispatchEvent(new Event('input'));
+                    
+                    // 사용자에게 설정 변경 안내
+                    showNotification('하드웨어 가속 설정',
+                        `'Hardware-accelerated video decode' 옵션을 ${isAccelerationEnabled ? '활성화' : '비활성화'}로 설정해주세요.`,
+                        8000);
+                    
+                    // 만약 리디렉션 중이라면 재시작 대화상자 표시
+                    if (isRedirecting) {
+                        setTimeout(() => {
+                            showRestartDialog();
+                        }, 2000);
+                    }
+                } else {
+                    console.log('검색 입력 필드를 찾을 수 없습니다.');
+                    showNotification('오류', '검색 필드를 찾을 수 없습니다. 수동으로 "Hardware-accelerated video decode"를 검색해주세요.', 5000);
+                }
+            }, 1000);
+        }
+    });
+})();
