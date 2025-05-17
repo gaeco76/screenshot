@@ -30,4 +30,36 @@ python screenshot_uploader.py
 
 - 스크립트는 데스크톱에 저장되는 스크린샷만 감지합니다.
 - 스크린샷은 PNG 형식만 지원합니다.
-- Google Drive API 할당량에 주의하세요. 
+- Google Drive API 할당량에 주의하세요.
+
+# Screenshot 프로젝트
+
+## 로그 관리
+
+이 프로젝트는 `error.log` 파일의 크기를 자동으로 관리합니다. 파일 크기가 20MB를 초과하면 이전 로그를 삭제하고 최신 로그만 유지합니다.
+
+### 로그 관리 스크립트 사용법
+
+1. 수동으로 실행:
+   ```bash
+   ./log_rotator.sh
+   ```
+
+2. 자동 실행 설정 (cron 작업):
+   ```bash
+   # 매시간 로그 크기 확인
+   crontab -e
+   ```
+   
+   다음 라인 추가:
+   ```
+   0 * * * * cd /Users/d20250106/screenshot && ./log_rotator.sh >> cron.log 2>&1
+   ```
+
+### Cron 작업 설정 방법
+
+1. 터미널을 열고 `crontab -e` 입력
+2. 위의 cron 라인을 추가 (경로를 실제 프로젝트 경로로 수정)
+3. 저장하고 나가기 (vi: ESC 누른 후 `:wq` 입력)
+
+이렇게 설정하면 매시간 로그 파일 크기를 확인하고 필요시 조정합니다. 
