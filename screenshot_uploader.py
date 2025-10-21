@@ -391,7 +391,26 @@ def main():
         print("로컬 기능을 초기화하는 중...")
         event_handler = ScreenshotHandler(creds=None)  # 초기에는 인증 정보 없이 시작
         observer = Observer()
-        screenshot_dir = "/Users/d20250106/screenshot"  # 실제 스크린샷 저장 경로
+        
+        # macOS 시스템 설정에서 스크린샷 저장 경로 가져오기
+        try:
+            result = subprocess.run(
+                ['defaults', 'read', 'com.apple.screencapture', 'location'],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                screenshot_dir = result.stdout.strip()
+                screenshot_dir = os.path.expanduser(screenshot_dir)  # ~ 확장
+                print(f"시스템 스크린샷 저장 경로를 감지했습니다: {screenshot_dir}")
+            else:
+                # 기본값: 데스크탑
+                screenshot_dir = os.path.join(os.path.expanduser("~"), "Desktop")
+                print(f"기본 스크린샷 경로를 사용합니다: {screenshot_dir}")
+        except Exception as e:
+            print(f"스크린샷 경로 감지 실패: {e}")
+            screenshot_dir = os.path.join(os.path.expanduser("~"), "Desktop")
+            print(f"기본 스크린샷 경로를 사용합니다: {screenshot_dir}")
         
         # 디렉토리 존재 확인
         if not os.path.exists(screenshot_dir):

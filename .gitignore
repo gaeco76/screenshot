@@ -1,3 +1,33 @@
+# 인증 및 토큰 파일
 token.pickle
-client_secret_*.json
+client_secret*.json
+
+# 로그 파일
+*.log
+*.err
+output.log
 error.log
+
+# 스크린샷 파일
+*.png
+*.jpg
+*.jpeg
+
+# 테스트 파일
+test_*.py
+run_test*.sh
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 기타
+monitorcapture
+*.plist
+crontab_setup.txt
