@@ -93,6 +93,8 @@ class GooglePhotosUploader:
         return creds
 
     def upload_photo(self, file_path):
+        self._refresh_token_if_needed()
+        
         if not self.upload_enabled or not self.creds:
             logger.info("업로드 비활성화 상태입니다.")
             return False
@@ -117,6 +119,26 @@ class GooglePhotosUploader:
         except Exception as e:
             logger.error(f"업로드 중 예외 발생: {e}")
             return False
+
+    def _refresh_token_if_needed(self):
+        if self.creds and self.creds.expired and self.creds.refresh_token:
+            try:
+                logger.info("토큰 만료 감지 (upload_photo), 갱신 시도...")
+                self.creds.refresh(Request())
+                with open(TOKEN_FILE, 'wb') as token:
+                    pickle.dump(self.creds, token)
+                logger.info("토큰 갱신 성공")
+            except Exception as e:
+                logger.error(f"토큰 갱신 실패: {e}")
+                logger.warning("인증 토큰이 만료되었거나 유효하지 않습니다. 토큰 파일을 삭제합니다.")
+                if os.path.exists(TOKEN_FILE):
+                    try:
+                        os.remove(TOKEN_FILE)
+                    except OSError:
+                        pass
+                self.creds = None
+                self.upload_enabled = False
+
 
     def _safe_ascii_filename(self, filename, file_path):
         ext = os.path.splitext(filename)[1]
