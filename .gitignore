@@ -31,3 +31,4 @@ __pycache__/
 monitorcapture
 *.plist
 crontab_setup.txt
+venv/
