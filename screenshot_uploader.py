@@ -397,14 +397,18 @@ class ScreenshotHandler(FileSystemEventHandler):
         return (os.path.realpath(file_path), stat.st_size, stat.st_mtime_ns)
 
     def copy_image_to_clipboard(self, file_path):
-        # 기존 로직 유지하되 간소화
+        # NSPasteboard에 직접 이미지 객체를 써넣는다.
+        # osascript('read ... as TIFF picture') 방식은 PNG를 TIFF로 강제 해석해
+        # macOS 버전/권한에 따라 깨지기 쉬워 PyObjC 경로로 대체함.
         try:
-             # pbcopy가 가장 안정적일 수 있음, 여기선 기존 로직을 축약해서 유지
-             # 간단히 osascript 사용
-             cmd = ["osascript", "-e", 
-                    f'tell application "System Events" to set the clipboard to (read (POSIX file "{file_path}") as TIFF picture)']
-             subprocess.run(cmd, check=True, capture_output=True)
-             logger.info("클립보드 복사 완료")
+            img = AppKit.NSImage.alloc().initWithContentsOfFile_(file_path)
+            if img is None:
+                raise RuntimeError("NSImage 로드 실패 (파일 손상 또는 미지원 형식)")
+            pasteboard = AppKit.NSPasteboard.generalPasteboard()
+            pasteboard.clearContents()
+            if not pasteboard.writeObjects_([img]):
+                raise RuntimeError("NSPasteboard writeObjects 실패")
+            logger.info("클립보드 복사 완료")
         except Exception as e:
             logger.warning(f"클립보드 복사 실패: {e}")
 
