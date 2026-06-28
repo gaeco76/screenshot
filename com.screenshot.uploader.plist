@@ -16,7 +16,7 @@
 		<string>/Users/m5/screenshot/.venv/bin/python</string>
 		<string>/Users/m5/screenshot/screenshot_uploader.py</string>
 		<string>--path</string>
-		<string>/Users/m5/screenshot/temp</string>
+		<string>/Users/m5/screenshot/screenshot_temp</string>
 		<string>--limit</string>
 		<string>20</string>
 	</array>
