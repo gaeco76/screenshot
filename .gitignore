@@ -32,3 +32,6 @@ monitorcapture
 *.plist
 crontab_setup.txt
 venv/
+.venv/
+
+*.out

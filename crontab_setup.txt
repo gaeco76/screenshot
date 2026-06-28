@@ -1,2 +1,2 @@
 # 매시간 로그 크기 확인 및 조정
-0 * * * * cd /Users/d20250106/screenshot && ./log_rotator.sh >> cron.log 2>&1 
+0 * * * * cd /Users/m5/screenshot && ./log_rotator.sh >> cron.log 2>&1

@@ -6,16 +6,18 @@
     <string>com.user.screenshot_uploader</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/python3</string>
-        <string>/Users/d20250106/screenshot/screenshot_uploader.py</string>
+        <string>/Users/m5/screenshot/.venv/bin/python</string>
+        <string>/Users/m5/screenshot/screenshot_uploader.py</string>
     </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/m5/screenshot</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardErrorPath</key>
-    <string>/Users/d20250106/screenshot/error.log</string>
+    <string>/Users/m5/screenshot/screenshot_uploader.err</string>
     <key>StandardOutPath</key>
-    <string>/Users/d20250106/screenshot/output.log</string>
+    <string>/Users/m5/screenshot/screenshot_uploader.out</string>
 </dict>
 </plist> 

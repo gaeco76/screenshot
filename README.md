@@ -53,7 +53,7 @@ python screenshot_uploader.py
    
    다음 라인 추가:
    ```
-   0 * * * * cd /Users/d20250106/screenshot && ./log_rotator.sh >> cron.log 2>&1
+   0 * * * * cd /Users/m5/screenshot && ./log_rotator.sh >> cron.log 2>&1
    ```
 
 ### Cron 작업 설정 방법
